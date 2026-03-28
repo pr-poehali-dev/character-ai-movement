@@ -1,0 +1,27 @@
+{
+  "tests": [
+    {
+      "name": "OPTIONS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "AI chat reply",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "character_name": "Котик",
+        "character_emoji": "🐱",
+        "personality_name": "Весёлый",
+        "personality_traits": ["игривый", "добрый"],
+        "happiness": 80,
+        "history": [],
+        "message": "Привет! Как дела?"
+      },
+      "expectedStatus": 200,
+      "expectedBody": { "reply": "string" },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
