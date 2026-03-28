@@ -1,11 +1,11 @@
 """
-AI-чат для персонажей СпрайтПет.
-Принимает историю сообщений и личность персонажа, возвращает ответ от OpenAI GPT-4o-mini.
-Использует прямой HTTP-запрос через urllib для обхода региональных ограничений SDK.
+AI-чат для персонажей СпрайтПет через Groq API (llama-3.3-70b-versatile).
+Быстрый и бесплатный, работает из любого региона.
 """
 import json
 import os
 import urllib.request
+import urllib.error
 
 
 def handler(event: dict, context) -> dict:
@@ -45,7 +45,7 @@ def handler(event: dict, context) -> dict:
 Сейчас ты {mood} (уровень счастья: {happiness}%).
 
 Правила общения:
-- Говори живо, эмоционально, по-русски. Используй эмодзи (1-3 на сообщение).
+- Говори живо, эмоционально, только по-русски. Используй эмодзи (1-3 на сообщение).
 - Ты НЕ AI и НЕ языковая модель — ты настоящий персонаж с душой и характером.
 - Отвечай коротко (1-3 предложения), как в переписке с другом.
 - Реагируй на настроение пользователя — поддерживай, шути, удивляйся.
@@ -59,24 +59,32 @@ def handler(event: dict, context) -> dict:
     messages.append({'role': 'user', 'content': user_message})
 
     payload = json.dumps({
-        'model': 'gpt-4o-mini',
+        'model': 'llama-3.3-70b-versatile',
         'messages': messages,
         'max_tokens': 200,
         'temperature': 0.85,
     }).encode('utf-8')
 
     req = urllib.request.Request(
-        'https://api.openai.com/v1/chat/completions',
+        'https://api.groq.com/openai/v1/chat/completions',
         data=payload,
         headers={
             'Content-Type': 'application/json',
-            'Authorization': f"Bearer {os.environ['OPENAI_API_KEY']}",
+            'Authorization': f"Bearer {os.environ['GROQ_API_KEY']}",
         },
         method='POST',
     )
 
-    with urllib.request.urlopen(req, timeout=25) as resp:
-        result = json.loads(resp.read().decode('utf-8'))
+    try:
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            result = json.loads(resp.read().decode('utf-8'))
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8')
+        return {
+            'statusCode': 502,
+            'headers': headers,
+            'body': json.dumps({'error': f'Groq HTTP {e.code}', 'detail': error_body}),
+        }
 
     reply = result['choices'][0]['message']['content'].strip()
 
