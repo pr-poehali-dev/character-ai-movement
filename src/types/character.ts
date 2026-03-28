@@ -5,6 +5,8 @@ export type AnimationState =
   | 'jump'
   | 'grab'
   | 'fall' 
+  | 'fly'
+  | 'climb'
   | 'sit' 
   | 'sleep' 
   | 'wave' 

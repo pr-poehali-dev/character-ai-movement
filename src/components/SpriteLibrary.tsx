@@ -14,6 +14,8 @@ const ANIMATION_STATES: { key: AnimationState; label: string; emoji: string; des
   { key: 'jump', label: 'Прыжок', emoji: '🦘', desc: 'Прыгает вверх' },
   { key: 'grab', label: 'В руках ✨', emoji: '😲', desc: 'Когда держат/тащат' },
   { key: 'fall', label: 'Падение', emoji: '😱', desc: 'Падает вниз' },
+  { key: 'fly', label: 'Полёт ✨', emoji: '🦋', desc: 'Летит по воздуху' },
+  { key: 'climb', label: 'Лазанье ✨', emoji: '🧗', desc: 'Лезет по стене' },
   { key: 'sit', label: 'Сидит', emoji: '🧘', desc: 'Сидит на месте' },
   { key: 'sleep', label: 'Сон', emoji: '😴', desc: 'Спит' },
   { key: 'wave', label: 'Машет', emoji: '👋', desc: 'Машет рукой' },
