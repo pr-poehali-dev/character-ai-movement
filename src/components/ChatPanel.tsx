@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { Character, ChatMessage } from '@/types/character';
 import Icon from '@/components/ui/icon';
 
+const CHAT_URL = 'https://functions.poehali.dev/a6a8c8ae-dd96-45e1-bd33-bc23dba418a0';
+
 interface ChatPanelProps {
   character: Character;
   onSendMessage: (charId: string, msg: ChatMessage) => void;
@@ -9,38 +11,58 @@ interface ChatPanelProps {
   embedded?: boolean;
 }
 
-const AI_RESPONSES: Record<string, string[]> = {
+// Локальный фолбэк если AI недоступен
+const LOCAL_RESPONSES: Record<string, string[]> = {
   'привет': ['Привет! Как я рад тебя видеть! 🎉', 'Ой, привет-привет! Я уже соскучился! 🥰', 'Привееет! ✨'],
   'как дела': ['Отлично, раз ты рядом! 😊', 'Всё супер! Ждал тебя! 🌟', 'Хорошо! Хочу поиграть! 🎮'],
-  'скучно': ['Давай поиграем! 🎮', 'Я придумал кое-что интересное... 💡', 'Не скучай! Расскажи мне что-нибудь! 😊'],
-  'грустно': ['Эй, не грусти! Я рядом 💙', 'Хочешь поговорить? Я слушаю всё ✨', 'Ты справишься! Я верю в тебя! 💪'],
+  'скучно': ['Давай поиграем! 🎮', 'Придумаем что-нибудь интересное! 💡', 'Расскажи мне что-нибудь! 😊'],
+  'грустно': ['Эй, не грусти! Я рядом 💙', 'Хочешь поговорить? Я слушаю ✨', 'Ты справишься! Верю в тебя! 💪'],
   'люблю': ['Я тоже! Ты мой любимый хозяин! 💗', 'Мур-мур~ 💋', 'Ты самый лучший! 🥰'],
-  'спать': ['Спокойной ночи! Сладких снов 🌙✨', 'Пока-пока! Не забудь меня! 😴', 'Засыпай, я буду охранять! 🌟'],
-  'помоги': ['Конечно! Что случилось? 🤔', 'Всегда готов помочь! 💪', 'Расскажи, я постараюсь! 😊'],
+  'спать': ['Спокойной ночи! 🌙✨', 'Пока-пока! Не забудь меня! 😴', 'Засыпай, я буду охранять! 🌟'],
+  'помоги': ['Конечно! Что случилось? 🤔', 'Всегда готов! 💪', 'Расскажи, я постараюсь! 😊'],
   'default': [
     'Интересно! Расскажи подробнее! 🤔',
     'Ого, я не знал этого! 👀',
     'Понял-понял! А что дальше? 😊',
     'Хм, давай подумаем вместе... 💭',
-    'Вот это да! А ты часто такое делаешь? 😄',
-    'Здорово! Ты умный, я бы так не додумался! ✨',
+    'Вот это да! 😄',
+    'Здорово! Ты умный! ✨',
     'Ммм, интересная мысль! 🌟',
   ],
 };
 
-function generateResponse(character: Character, userText: string): string {
+function localFallback(character: Character, userText: string): string {
   const lower = userText.toLowerCase();
-  for (const [key, responses] of Object.entries(AI_RESPONSES)) {
+  for (const [key, responses] of Object.entries(LOCAL_RESPONSES)) {
     if (key !== 'default' && lower.includes(key)) {
       return responses[Math.floor(Math.random() * responses.length)];
     }
   }
-  const name = character.name;
-  const personalityResponses = [
-    `${name} думает: "${AI_RESPONSES.default[Math.floor(Math.random() * AI_RESPONSES.default.length)]}"`,
-    AI_RESPONSES.default[Math.floor(Math.random() * AI_RESPONSES.default.length)],
-  ];
-  return personalityResponses[Math.floor(Math.random() * personalityResponses.length)];
+  return LOCAL_RESPONSES.default[Math.floor(Math.random() * LOCAL_RESPONSES.default.length)];
+}
+
+async function fetchAIReply(character: Character, history: ChatMessage[], userText: string): Promise<{ reply: string; isAI: boolean }> {
+  try {
+    const res = await fetch(CHAT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        character_name: character.name,
+        character_emoji: character.emoji,
+        character_color: character.color,
+        personality_name: character.personality?.name || 'Весёлый',
+        personality_traits: character.personality?.traits || ['игривый'],
+        happiness: character.happiness,
+        history: history.slice(-12).map(m => ({ role: m.role, text: m.text })),
+        message: userText,
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return { reply: data.reply, isAI: true };
+  } catch {
+    return { reply: localFallback(character, userText), isAI: false };
+  }
 }
 
 function formatTime(ts: number): string {
@@ -50,6 +72,7 @@ function formatTime(ts: number): string {
 export default function ChatPanel({ character, onSendMessage, onClose, embedded = false }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [aiMode, setAiMode] = useState<'unknown' | 'ai' | 'local'>('unknown');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -69,15 +92,15 @@ export default function ChatPanel({ character, onSendMessage, onClose, embedded 
       timestamp: Date.now(),
     };
     onSendMessage(character.id, userMsg);
-
     setIsTyping(true);
-    await new Promise(r => setTimeout(r, 800 + Math.random() * 1200));
 
-    const responseText = generateResponse(character, text);
+    const { reply, isAI } = await fetchAIReply(character, character.chatHistory, text);
+    setAiMode(isAI ? 'ai' : 'local');
+
     const charMsg: ChatMessage = {
       id: Math.random().toString(36).substr(2),
       role: 'character',
-      text: responseText,
+      text: reply,
       timestamp: Date.now(),
     };
     onSendMessage(character.id, charMsg);
@@ -100,15 +123,22 @@ export default function ChatPanel({ character, onSendMessage, onClose, embedded 
         className="flex items-center gap-3 p-4 text-white"
         style={{ background: `linear-gradient(135deg, ${character.color}, ${character.color}cc)` }}
       >
-        <div
-          className="w-11 h-11 rounded-full flex items-center justify-center text-xl font-black bg-white/20 shadow-inner"
-        >
+        <div className="w-11 h-11 rounded-full flex items-center justify-center text-xl font-black bg-white/20 shadow-inner">
           {character.emoji}
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-nunito font-black text-lg leading-tight">{character.name}</div>
-          <div className="text-sm opacity-80 font-nunito">
-            {character.happiness > 70 ? '😄 Счастлив' : character.happiness > 40 ? '😊 В порядке' : '🥺 Грустит'}
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-sm opacity-80 font-nunito">
+              {character.happiness > 70 ? '😄 Счастлив' : character.happiness > 40 ? '😊 В порядке' : '🥺 Грустит'}
+            </span>
+            {aiMode !== 'unknown' && (
+              <span className={`text-xs px-2 py-0.5 rounded-full font-nunito font-bold ${
+                aiMode === 'ai' ? 'bg-white/30 text-white' : 'bg-white/15 text-white/70'
+              }`}>
+                {aiMode === 'ai' ? '✨ AI' : '💬 Авто'}
+              </span>
+            )}
           </div>
         </div>
         {onClose && (
@@ -207,11 +237,14 @@ export default function ChatPanel({ character, onSendMessage, onClose, embedded 
         />
         <button
           onClick={sendMessage}
-          disabled={!input.trim()}
+          disabled={!input.trim() || isTyping}
           className="w-11 h-11 rounded-2xl flex items-center justify-center transition-all disabled:opacity-40"
           style={{ background: 'linear-gradient(135deg, #A855F7, #EC4899)' }}
         >
-          <Icon name="Send" size={16} className="text-white" />
+          {isTyping
+            ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            : <Icon name="Send" size={16} className="text-white" />
+          }
         </button>
       </div>
     </div>

@@ -1,1 +1,1 @@
-openai>=1.0.0
+# no external deps — using stdlib urllib

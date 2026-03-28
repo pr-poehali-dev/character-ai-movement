@@ -1,10 +1,11 @@
 """
 AI-чат для персонажей СпрайтПет.
 Принимает историю сообщений и личность персонажа, возвращает ответ от OpenAI GPT-4o-mini.
+Использует прямой HTTP-запрос через urllib для обхода региональных ограничений SDK.
 """
 import json
 import os
-from openai import OpenAI
+import urllib.request
 
 
 def handler(event: dict, context) -> dict:
@@ -20,11 +21,10 @@ def handler(event: dict, context) -> dict:
     body = json.loads(event.get('body') or '{}')
     character_name = body.get('character_name', 'Персонаж')
     character_emoji = body.get('character_emoji', '🐱')
-    character_color = body.get('character_color', '#A855F7')
     personality_name = body.get('personality_name', 'Весёлый')
     personality_traits = body.get('personality_traits', ['игривый', 'добрый'])
     happiness = body.get('happiness', 80)
-    history = body.get('history', [])  # [{role: 'user'|'character', text: str}]
+    history = body.get('history', [])
     user_message = body.get('message', '')
 
     if not user_message.strip():
@@ -53,22 +53,32 @@ def handler(event: dict, context) -> dict:
 - Никогда не выходи из роли персонажа."""
 
     messages = [{'role': 'system', 'content': system_prompt}]
-
     for msg in history[-12:]:
         role = 'user' if msg.get('role') == 'user' else 'assistant'
         messages.append({'role': role, 'content': msg.get('text', '')})
-
     messages.append({'role': 'user', 'content': user_message})
 
-    client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
-    response = client.chat.completions.create(
-        model='gpt-4o-mini',
-        messages=messages,
-        max_tokens=200,
-        temperature=0.85,
+    payload = json.dumps({
+        'model': 'gpt-4o-mini',
+        'messages': messages,
+        'max_tokens': 200,
+        'temperature': 0.85,
+    }).encode('utf-8')
+
+    req = urllib.request.Request(
+        'https://api.openai.com/v1/chat/completions',
+        data=payload,
+        headers={
+            'Content-Type': 'application/json',
+            'Authorization': f"Bearer {os.environ['OPENAI_API_KEY']}",
+        },
+        method='POST',
     )
 
-    reply = response.choices[0].message.content.strip()
+    with urllib.request.urlopen(req, timeout=25) as resp:
+        result = json.loads(resp.read().decode('utf-8'))
+
+    reply = result['choices'][0]['message']['content'].strip()
 
     return {
         'statusCode': 200,
