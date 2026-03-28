@@ -107,33 +107,60 @@ export default function OverlayCharacter({ character, onChat, onAction, onClose 
     runRef.current = interval as unknown as NodeJS.Timeout;
   }, [isRunning]);
 
-  // Drag handling
+  // Drag handling — mouse
   const onMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
     setIsDragging(true);
     setDragOffset({ x: e.clientX - pos.x, y: e.clientY - pos.y });
-    setAnimation('jump');
+    setAnimation('grab');
+    showBubble('Вееееее! 🎉', 1500);
+    e.preventDefault();
+  };
+
+  // Drag handling — touch
+  const onTouchStart = (e: React.TouchEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    const touch = e.touches[0];
+    setIsDragging(true);
+    setDragOffset({ x: touch.clientX - pos.x, y: touch.clientY - pos.y });
+    setAnimation('grab');
+    showBubble('Вееееее! 🎉', 1500);
     e.preventDefault();
   };
 
   useEffect(() => {
     if (!isDragging) return;
+
     const onMove = (e: MouseEvent) => {
       setPos({
         x: Math.max(0, Math.min(window.innerWidth - 110, e.clientX - dragOffset.x)),
         y: Math.max(0, Math.min(window.innerHeight - 140, e.clientY - dragOffset.y)),
       });
     };
+    const onTouchMove = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      setPos({
+        x: Math.max(0, Math.min(window.innerWidth - 110, touch.clientX - dragOffset.x)),
+        y: Math.max(0, Math.min(window.innerHeight - 140, touch.clientY - dragOffset.y)),
+      });
+      e.preventDefault();
+    };
     const onUp = () => {
       setIsDragging(false);
       setAnimation('fall');
+      showBubble('Бум! 💥', 1200);
       setTimeout(() => setAnimation('idle'), 800);
     };
+
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onUp);
     return () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onUp);
     };
   }, [isDragging, dragOffset]);
 
@@ -170,18 +197,46 @@ export default function OverlayCharacter({ character, onChat, onAction, onClose 
 
       {/* Character */}
       <div
-        className="group relative"
+        className="group relative select-none"
         onMouseDown={onMouseDown}
+        onTouchStart={onTouchStart}
         style={{
-          transform: runDir === 'left' ? 'scaleX(-1)' : 'scaleX(1)',
+          transform: `scaleX(${runDir === 'left' ? -1 : 1}) rotate(${isDragging ? (runDir === 'left' ? 8 : -8) : 0}deg)`,
           cursor: isDragging ? 'grabbing' : 'grab',
+          transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+          filter: isDragging
+            ? `drop-shadow(0 16px 24px ${character.color}88) drop-shadow(0 6px 8px rgba(0,0,0,0.25))`
+            : `drop-shadow(0 4px 8px ${character.color}44)`,
         }}
       >
+        {/* Grab glow ring */}
+        {isDragging && (
+          <div
+            className="absolute inset-0 rounded-full animate-pulse-glow pointer-events-none"
+            style={{
+              background: `radial-gradient(circle, ${character.color}33 0%, transparent 70%)`,
+              transform: 'scale(1.4)',
+            }}
+          />
+        )}
         <CharacterSprite
           character={character}
           animation={animation}
           size={90}
         />
+        {/* Shadow on ground when held high */}
+        {isDragging && (
+          <div
+            className="absolute -bottom-3 left-1/2 -translate-x-1/2 rounded-full pointer-events-none"
+            style={{
+              width: 60,
+              height: 10,
+              background: 'rgba(0,0,0,0.15)',
+              filter: 'blur(4px)',
+              transform: `translateX(-50%) scaleX(${runDir === 'left' ? -1 : 1})`,
+            }}
+          />
+        )}
       </div>
 
       {/* Control panel */}
